@@ -2932,6 +2932,7 @@ MGEOF
 
 generate_docs() {
     log_step "Gerando documentacao"
+
     cat > "${MONIHOOK_DIR}/docs/GUIA_IMPLANTACAO.md" << 'D1EOF'
 # Monihook - Guia de Implantacao
 
@@ -2942,5 +2943,207 @@ generate_docs() {
 - Portas: 22, 80, 443
 
 ## 2. Instalacao
-```bash
 sudo bash install_monihook.sh
+
+## 3. Acesso
+- URL: http://IP_DO_SERVIDOR
+- Email: admin@monihook.com.br
+- Senha: ver arquivo .credentials
+
+## 4. Comandos
+./monihook.sh start        - Iniciar
+./monihook.sh stop         - Parar
+./monihook.sh restart      - Reiniciar
+./monihook.sh status       - Status
+./monihook.sh logs         - Logs
+./monihook.sh backup       - Backup
+./monihook.sh credentials  - Ver senhas
+
+## 5. Configurar PrivacyTools
+1. Configuracoes > Plataformas > Nova
+2. Tipo: PrivacyTools
+3. URL: https://dpo.privacytools.com.br/external_api_v2
+4. API Key: obtida no painel PrivacyTools
+
+## 6. Configurar Grafana
+1. Configuracoes > Plataformas > Nova
+2. Tipo: Grafana
+3. URL: https://dashboard.cmtech.com.br
+4. Usuario e senha do Grafana
+
+## 7. Backup
+./monihook.sh backup
+
+## 8. HTTPS com Let's Encrypt
+apt install certbot
+certbot certonly --standalone -d seu-dominio.com.br
+D1EOF
+
+    cat > "${MONIHOOK_DIR}/docs/ESTRUTURA.md" << 'D2EOF'
+# Estrutura de Pastas
+
+/opt/monihook/
+  .env                    - Variaveis de ambiente
+  .credentials            - Credenciais (GUARDE!)
+  docker-compose.yml      - Containers Docker
+  monihook.sh             - Script de gerenciamento
+  database/
+    init.sql              - Schema do banco PostgreSQL
+  backend/
+    Dockerfile
+    requirements.txt
+    app/
+      main.py             - Entrada FastAPI
+      config.py           - Configuracoes
+      database.py         - Conexao banco
+      dependencies.py     - Auth/permissoes
+      models/             - ORM SQLAlchemy
+      routers/            - Endpoints da API
+      services/           - Logica de negocio
+      utils/              - Seguranca, TOTP
+  frontend/
+    Dockerfile
+    package.json
+    src/
+      App.js              - Roteamento
+      theme.js            - Temas white-label
+      contexts/           - React Contexts
+      services/           - API client
+      components/         - Componentes React
+  nginx/
+    default.conf          - Proxy reverso
+  docs/
+    GUIA_IMPLANTACAO.md
+    ESTRUTURA.md
+
+Rotas da API:
+  POST /api/auth/login
+  POST /api/auth/verify-2fa
+  POST /api/auth/forgot-password
+  POST /api/auth/reset-password
+  POST /api/auth/change-password
+  POST /api/auth/refresh
+  GET  /api/auth/me
+  GET  /api/dashboard/overview
+  GET  /api/privacy/activities
+  GET  /api/privacy/consents
+  GET  /api/privacy/dsar
+  GET  /api/privacy/incidents
+  GET  /api/privacy/risks
+  POST /api/privacy/sync
+  GET  /api/monitoring/grafana/dashboards
+  GET  /api/monitoring/grafana/health
+  GET  /api/monitoring/uptime
+  GET  /api/monitoring/metrics
+  GET  /api/monitoring/embed-url
+  GET  /api/tickets/
+  POST /api/tickets/
+  PUT  /api/tickets/{id}
+  GET  /api/tickets/metrics/sla
+  GET  /api/reports/templates
+  POST /api/reports/templates
+  POST /api/reports/generate
+  GET  /api/reports/history
+  POST /api/reports/schedules
+  GET  /api/users/
+  POST /api/users/
+  PUT  /api/users/{id}
+  GET  /api/users/service-types
+  GET  /api/platforms/
+  POST /api/platforms/
+  PUT  /api/platforms/{id}
+  DEL  /api/platforms/{id}
+  GET  /api/tenants/current
+  PUT  /api/tenants/current/branding
+  POST /api/tenants/
+D2EOF
+
+    log_info "Documentacao gerada"
+}
+
+generate_readme() {
+    cat > "${MONIHOOK_DIR}/README.md" << 'RMEOF'
+# Monihook
+Monitoramento de Servicos de Privacidade - LGPD e GDPR
+
+## Quick Start
+sudo bash install_monihook.sh
+
+## Gerenciamento
+./monihook.sh start
+./monihook.sh stop
+./monihook.sh restart
+./monihook.sh status
+./monihook.sh logs
+./monihook.sh backup
+./monihook.sh credentials
+RMEOF
+}
+
+generate_zip() {
+    log_step "Gerando arquivo compactado"
+    cd /opt
+    tar -czf monihook-v${MONIHOOK_VERSION}.tar.gz monihook/
+    log_info "tar.gz: /opt/monihook-v${MONIHOOK_VERSION}.tar.gz"
+}
+
+# ═══════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════
+main() {
+    print_banner
+    check_root
+    check_os
+
+    echo ""
+    echo "Este script ira:"
+    echo "  1. Instalar Docker e Docker Compose"
+    echo "  2. Criar toda estrutura do Monihook"
+    echo "  3. Gerar banco de dados e configuracoes"
+    echo "  4. Compilar e iniciar containers"
+    echo ""
+    echo "Local: ${MONIHOOK_DIR}"
+    echo ""
+
+    read -p "Continuar? (s/n): " -n 1 -r
+    echo ""
+    [[ ! $REPLY =~ ^[SsYy]$ ]] && echo "Cancelado." && exit 0
+
+    install_dependencies
+    setup_firewall
+    create_project_structure
+    generate_env
+    generate_docker_compose
+    generate_init_sql
+    generate_nginx
+    generate_backend
+    generate_frontend
+    generate_management_script
+    generate_docs
+    generate_readme
+
+    log_step "Compilando e iniciando containers"
+    cd "${MONIHOOK_DIR}"
+    docker compose build 2>&1 | tail -20
+    docker compose up -d 2>&1 | tail -10
+
+    log_info "Aguardando servicos (30s)..."
+    sleep 30
+    docker compose ps
+
+    generate_zip
+
+    log_step "INSTALACAO CONCLUIDA!"
+    echo ""
+    cat "${MONIHOOK_DIR}/.credentials"
+    echo ""
+    echo "Comandos:"
+    echo "  cd ${MONIHOOK_DIR}"
+    echo "  ./monihook.sh status"
+    echo "  ./monihook.sh logs"
+    echo "  ./monihook.sh credentials"
+    echo ""
+    echo "Pacote: /opt/monihook-v${MONIHOOK_VERSION}.tar.gz"
+}
+
+main "$@"
