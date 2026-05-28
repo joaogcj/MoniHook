@@ -2932,7 +2932,6 @@ MGEOF
 
 generate_docs() {
     log_step "Gerando documentacao"
-
     cat > "${MONIHOOK_DIR}/docs/GUIA_IMPLANTACAO.md" << 'D1EOF'
 # Monihook - Guia de Implantacao
 
